@@ -1,0 +1,181 @@
+{
+  "title": "DRR Scheduler (Layer 1)",
+  "uid": "drr-scheduler",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-15m", "to": "now" },
+  "refresh": "5s",
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Global budget vs in-flight",
+      "description": "Total slots configured (num_workers × cap_per_worker) versus slots currently dispatched. The budget line is flat in Layer 1 (static config); in Layer 2 the AIMD controller will move it. The gap between them is spare capacity. Inflight pinned at the budget = system saturated and DRR is fair-sharing across tenants.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineInterpolation": "stepAfter", "fillOpacity": 5 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "budget" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 6] } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "max(gateway_global_budget)",
+          "legendFormat": "budget"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "max(gateway_global_inflight)",
+          "legendFormat": "inflight"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Queue depth by tenant",
+      "description": "Pending requests waiting on the per-tenant scheduler queue (queue_max bound). The DRR smoking gun: a well-behaved tenant's depth stays at 0; an over-rate tenant's depth pins near queue_max during a burst. When this hits queue_max, the next request gets an immediate 504 (overflow shedding).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "max by (tenant_id) (gateway_queue_depth)",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Submitted by tenant",
+      "description": "Incoming request rate per tenant, recorded at middleware entry before any auth or queueing. This is the load each tenant is *trying* to send.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (tenant_id) (rate(gateway_requests_received_total{route=~\"/v1/.*\", tenant_id!=\"unknown\"}[15s]))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Admitted by tenant",
+      "description": "Requests per second that completed with HTTP 200 — i.e., were dispatched to the upstream and finished cleanly. Compared with submitted, the gap is the shed rate (queue overflow + queue-wait timeout → 504).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (tenant_id) (rate(gateway_requests_total{route=~\"/v1/.*\", status=\"200\", tenant_id!=\"unknown\"}[15s]))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "TTFT p99 by tenant",
+      "description": "Time from gateway middleware entry to first response chunk, p99 over a 15-second window. Includes scheduler queue wait + dispatch + upstream's first-token decode. Victim protection check: tenant-A's line should stay flat during tenant-B's burst because DRR keeps A's queue empty. If A's TTFT climbs sharply, isolation is broken.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.99, sum by (tenant_id, le) (rate(gateway_ttft_seconds_bucket{tenant_id!=\"unknown\"}[15s])))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "504 shedding rate by tenant",
+      "description": "Rate of 504 Gateway Timeout responses per tenant. With Layer-1 DRR, this is single-source: queue overflow at put_nowait (or the secondary 30s queue-wait timeout). Expected pattern under noisy-neighbor: A and C ≈ 0, B spikes to its excess submission rate during burst.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (tenant_id) (rate(gateway_requests_total{status=\"504\", route=~\"/v1/.*\", tenant_id!=\"unknown\"}[15s]))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    }
+  ]
+}

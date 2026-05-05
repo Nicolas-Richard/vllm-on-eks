@@ -3,22 +3,26 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
-replicaCount: 2
+replicaCount: 1   # single-replica; per-replica semaphore is correct under that assumption
 
-bearerSecret:
-  name: gateway-auth
-  key: bearer-token
+tenantsConfigMap:
+  name: fastapi-gateway-tenants
+  key: tenants.yaml
+  mountPath: /etc/gateway
+
+tenantKeysSecret:
+  name: fastapi-gateway-tenant-keys
 
 router:
-  url: "http://vllm-router.vllm.svc.cluster.local:80"
+  url: "http://vllm-stack-router-service.vllm.svc.cluster.local:80"
 
 resources:
   requests:
-    cpu: "200m"
-    memory: "256Mi"
+    cpu: "500m"
+    memory: "512Mi"
   limits:
-    cpu: "1"
-    memory: "1Gi"
+    cpu: "2"
+    memory: "2Gi"
 
 nodeSelector:
   workload: cpu
@@ -27,3 +31,13 @@ service:
   type: ClusterIP
   port: 80
   targetPort: 8000
+
+# WorkerCapacityWatcher RBAC controls. The watcher reads EndpointSlices in the
+# upstream vLLM namespace to track Ready engine replicas. Disable to skip
+# rendering the Role + RoleBinding; the operator should also disable the
+# watcher in tenants.yaml in that case (the chart does not propagate these
+# values into the tenants ConfigMap).
+workerWatcher:
+  enabled: true
+  namespace: vllm
+  serviceName: vllm-stack-qwen25-7b-engine-service

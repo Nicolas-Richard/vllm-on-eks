@@ -7,6 +7,8 @@ dependencies = [
   "uvicorn[standard]>=0.32,<0.36",
   "httpx>=0.27,<0.29",
   "prometheus-client>=0.21,<0.23",
+  "pyyaml>=6,<7",
+  "kubernetes-asyncio>=27,<33",
 ]
 
 [dependency-groups]

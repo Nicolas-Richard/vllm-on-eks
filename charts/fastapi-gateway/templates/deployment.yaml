@@ -17,8 +17,16 @@ spec:
         app: fastapi-gateway
         app.kubernetes.io/name: fastapi-gateway
     spec:
+      serviceAccountName: {{ .Release.Name }}
       nodeSelector:
         {{- toYaml .Values.nodeSelector | nindent 8 }}
+      volumes:
+        - name: tenants-config
+          configMap:
+            name: {{ .Values.tenantsConfigMap.name }}
+            items:
+              - key: {{ .Values.tenantsConfigMap.key }}
+                path: tenants.yaml
       containers:
         - name: gateway
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -26,14 +34,18 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.service.targetPort }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.tenantKeysSecret.name }}
           env:
-            - name: BEARER_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.bearerSecret.name }}
-                  key: {{ .Values.bearerSecret.key }}
             - name: ROUTER_URL
               value: "{{ .Values.router.url }}"
+            - name: TENANTS_PATH
+              value: "{{ .Values.tenantsConfigMap.mountPath }}/tenants.yaml"
+          volumeMounts:
+            - name: tenants-config
+              mountPath: {{ .Values.tenantsConfigMap.mountPath }}
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /healthz

@@ -43,7 +43,7 @@ resource "aws_eks_node_group" "cpu" {
   instance_types = ["t3.large"]
   ami_type       = "AL2023_x86_64_STANDARD"
   capacity_type  = "ON_DEMAND"
-  disk_size      = 50
+  disk_size      = 150
 
   scaling_config {
     desired_size = 1

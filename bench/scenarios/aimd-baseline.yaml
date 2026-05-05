@@ -1,0 +1,23 @@
+# AIMD baseline: single tenant at a sustainable rate, no burst.
+#
+# Purpose: confirm that with no overload, AIMD records only 'hold' actions
+# and cap_per_worker stays at the bootstrap value (16). This is the control
+# run paired with aimd-sustained-pressure.yaml.
+#
+# Rate sized so 2 rps × ~5s decode ≈ 10 in-flight, well under budget=32.
+# Queue stays empty most of the time → demand gate doesn't fire even if
+# p99 dips below target → AI ticks are 'hold', not 'increase'. Expected
+# action breakdown after 3 minutes: ~36 hold, 0 increase, 0 decrease.
+#
+# Run:
+#   ./bench/run_scenario.sh bench/scenarios/aimd-baseline.yaml \
+#     --caps-enabled true
+
+total_duration_s: 180
+tenants:
+  - id: tenant-a
+    role: aimd_steady_baseline
+    start_offset_s: 0
+    duration_s: 180
+    request_rate: 0.5
+    num_prompts: 90

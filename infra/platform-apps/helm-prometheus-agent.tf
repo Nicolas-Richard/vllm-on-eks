@@ -72,6 +72,10 @@ resource "helm_release" "prometheus_agent" {
         scrape_configs = [
           {
             job_name              = "vllm-workers"
+            # 5s matches fastapi-gateway scrape; gives the dashboards
+            # consistent temporal resolution end-to-end.
+            scrape_interval       = "5s"
+            scrape_timeout        = "4s"
             kubernetes_sd_configs = [{ role = "pod" }]
             relabel_configs = [
               {
@@ -113,6 +117,11 @@ resource "helm_release" "prometheus_agent" {
           },
           {
             job_name              = "fastapi-gateway"
+            # Gateway-only override: 5s scrape so short bursts (queue depth
+            # plateaus, in-flight transients) aren't sampling-aliased away.
+            # Other targets stay at the global 30s.
+            scrape_interval       = "5s"
+            scrape_timeout        = "4s"
             kubernetes_sd_configs = [{ role = "pod" }]
             relabel_configs = [
               {

@@ -1,0 +1,48 @@
+# AIMD-only end-to-end scenario.
+#
+# Purpose: drive p99 TTFT above target_p99_ttft_s (2.0s) for long enough that
+# the AIMD controller halves cap_per_worker, then drop the load so it climbs
+# back. The scenario is deliberately watcher-agnostic — set worker_watcher
+# disabled in the gateway config; only AIMD should move the budget.
+#
+# Three implicit phases:
+#   t=0–60s    warmup. tenant-a alone at 3 rps. Should be comfortable for
+#              the L4 baseline (num_workers=2 × cap_per_worker=16 = budget 32).
+#              Expect AIMD to record 'hold' on every tick.
+#
+#   t=60–120s  overload. tenant-b joins at 12 rps for 60 seconds. Combined
+#              offered load (~15 rps) sustained above the L4 bandwidth knee
+#              should push p99 TTFT past 2s. Expect AIMD to record several
+#              'decrease' actions across this window — cap halves 16 → 8,
+#              and possibly 8 → 4 depending on how long p99 stays elevated.
+#
+#   t=120–300s recovery. tenant-b's bench process ends. tenant-a continues
+#              at 3 rps. With the smaller cap, queues stay non-empty for
+#              a while — exactly the demand gate AIMD's 'increase' action
+#              needs. Expect a slow climb back toward 16 (one +1 per tick
+#              while queue depth > 0 and p99 < 2s).
+#
+# Run:
+#   ./bench/run_scenario.sh bench/scenarios/aimd-sustained-pressure.yaml \
+#     --caps-enabled true
+#
+# Watch:
+#   AIMD dashboard (uid=aimd) panels 1, 3, 4 — the three smoking guns:
+#     1. cap_per_worker steps down then climbs.
+#     3. p99 TTFT crosses the 2s line then drops below.
+#     4. action histogram: cluster of red (decrease) then green (increase).
+
+total_duration_s: 300
+tenants:
+  - id: tenant-a
+    role: aimd_demand_signal
+    start_offset_s: 0
+    duration_s: 300
+    request_rate: 0.5
+    num_prompts: 150
+  - id: tenant-b
+    role: aimd_overload_burst
+    start_offset_s: 60
+    duration_s: 90
+    request_rate: 8
+    num_prompts: 720

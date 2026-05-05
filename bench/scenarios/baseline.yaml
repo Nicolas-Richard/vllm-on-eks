@@ -1,0 +1,14 @@
+total_duration_s: 60
+tenants:
+  - id: tenant-a
+    role: steady_victim
+    start_offset_s: 0
+    duration_s: 60
+    request_rate: 2
+    num_prompts: 120
+  - id: tenant-c
+    role: steady_background
+    start_offset_s: 0
+    duration_s: 60
+    request_rate: 1
+    num_prompts: 60

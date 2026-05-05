@@ -43,6 +43,11 @@ resource "helm_release" "grafana" {
             sigV4Auth     = true
             sigV4AuthType = "default"
             sigV4Region   = var.region
+            # Default step Grafana asks AMP for. Was 15s by default —
+            # capped queue-depth panels at 1 sample per 15s and hid the
+            # gateway's 5s-scrape resolution. Drop to 5s to match the
+            # gateway scrape interval.
+            timeInterval  = "5s"
           }
         }]
       }

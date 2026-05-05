@@ -1,0 +1,213 @@
+{
+  "title": "AIMD Controller (Layer 2)",
+  "uid": "aimd",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-15m", "to": "now" },
+  "refresh": "5s",
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "cap_per_worker (AIMD lever)",
+      "description": "The per-worker dispatch cap, the only knob the AIMD controller turns. AI ticks add 1 (slow climb when there is demand and p99 is below target); MD ticks halve it (sharp drop when p99 exceeds target). Step-after rendering makes each tick decision visible. Floor and ceiling are the cap_per_worker_min/max from config.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "lineInterpolation": "stepAfter", "fillOpacity": 5, "lineWidth": 2 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "min", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "max(gateway_cap_per_worker)",
+          "legendFormat": "cap_per_worker"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Global budget vs in-flight",
+      "description": "Total slots = num_workers × cap_per_worker. With AIMD on, the budget moves: it steps down on each MD tick and creeps up on each AI tick. The gap between budget and inflight is spare capacity; inflight pinned at budget = saturated and AIMD has work to do.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineInterpolation": "stepAfter", "fillOpacity": 5 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "budget" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 6] } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "max(gateway_global_budget)",
+          "legendFormat": "budget"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "max(gateway_global_inflight)",
+          "legendFormat": "inflight"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "TTFT p99 vs target (AIMD trigger)",
+      "description": "p99 of gateway_ttft_seconds across all tenants over a 30s window — the same signal AIMD reads from its in-process histogram snapshot. The dashed red line is target_p99_ttft_s (default 2.0s). When the p99 line crosses above the target, the next AIMD tick should record a 'decrease' action. Sustained overshoot triggers repeated halving.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "target" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 6] } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(gateway_ttft_seconds_bucket{tenant_id!=\"unknown\"}[30s])))",
+          "legendFormat": "p99 (all tenants)"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "vector(2.0)",
+          "legendFormat": "target"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "AIMD actions per bucket (increase/decrease only)",
+      "description": "Count of AIMD increase/decrease tick decisions per Grafana step bucket. 'hold' is filtered out because it dominates idle periods. Bars render each bucket discretely so a single tick is a visible spike instead of a smeared rate. Min step is pinned to 5s to match tick_s; zooming in further can't sub-divide a single tick.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "stacking": { "mode": "none" }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "increase" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "decrease" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "sum"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (action) (increase(gateway_aimd_action_total{action!=\"hold\"}[10s]))",
+          "legendFormat": "{{action}}",
+          "interval": "5s"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "TTFT p99 by tenant",
+      "description": "Per-tenant p99 TTFT, useful for sanity-checking which tenant is driving the global p99 above target. Under the AIMD-only sustained-pressure scenario the signal should be the loaded tenants — a quiet tenant should not see TTFT climb purely because the cap shrinks (DRR keeps it isolated).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.99, sum by (tenant_id, le) (rate(gateway_ttft_seconds_bucket{tenant_id!=\"unknown\"}[30s])))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Queue depth (AIMD demand gate)",
+      "description": "Per-tenant scheduler queue depth — same metric as the DRR dashboard, here repeated because it is also the AIMD demand gate. The 'increase' action only fires when at least one tenant has queue depth > 0. If queues drain to zero during recovery, AIMD switches to 'hold' even when p99 is below target.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "max by (tenant_id) (gateway_queue_depth)",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    }
+  ]
+}

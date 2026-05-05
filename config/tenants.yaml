@@ -1,0 +1,33 @@
+caps_enabled: true
+num_workers: 2
+cap_per_worker: 64
+aimd:
+  enabled: true
+  target_p99_ttft_s: 2.0
+  tick_s: 5.0
+  window_s: 30.0
+  cap_per_worker_min: 16
+  cap_per_worker_max: 128
+  target_band_pct: 0.2
+  cooldown_ticks: 3
+  decrease_step: 4
+worker_watcher:
+  enabled: true
+  namespace: vllm
+  service_name: vllm-stack-qwen25-7b-engine-service
+tenants:
+  - id: tenant-a
+    name: "Tenant A (paying)"
+    weight: 2
+    queue_max: 8
+    key_env: TENANT_A_KEY
+  - id: tenant-b
+    name: "Tenant B (free)"
+    weight: 1
+    queue_max: 2
+    key_env: TENANT_B_KEY
+  - id: tenant-c
+    name: "Tenant C (background)"
+    weight: 1
+    queue_max: 2
+    key_env: TENANT_C_KEY

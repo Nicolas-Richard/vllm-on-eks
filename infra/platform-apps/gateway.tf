@@ -47,11 +47,16 @@ resource "helm_release" "fastapi_gateway" {
       pullPolicy = "IfNotPresent"
     }
 
-    replicaCount = 2
+    replicaCount = 1
 
-    bearerSecret = {
-      name = kubernetes_secret_v1.gateway_auth.metadata[0].name
-      key  = "bearer-token"
+    tenantsConfigMap = {
+      name      = kubernetes_config_map_v1.gateway_tenants.metadata[0].name
+      key       = "tenants.yaml"
+      mountPath = "/etc/gateway"
+    }
+
+    tenantKeysSecret = {
+      name = kubernetes_secret_v1.gateway_tenant_keys.metadata[0].name
     }
 
     router = {
@@ -62,6 +67,15 @@ resource "helm_release" "fastapi_gateway" {
       workload = "cpu"
     }
 
+    # Sized for the noisy-neighbor demo: caps-OFF lets thousands of requests
+    # become concurrent, each holding an httpx connection + buffers. 1Gi was
+    # OOMKilled mid-run; 2Gi survives. (A future refactor reusing one
+    # AsyncClient across requests would lower the steady-state footprint.)
+    resources = {
+      requests = { cpu = "200m", memory = "256Mi" }
+      limits   = { cpu = "2", memory = "2Gi" }
+    }
+
     service = {
       type       = "ClusterIP"
       port       = 80
@@ -70,7 +84,8 @@ resource "helm_release" "fastapi_gateway" {
   })]
 
   depends_on = [
-    kubernetes_secret_v1.gateway_auth,
+    kubernetes_secret_v1.gateway_tenant_keys,
+    kubernetes_config_map_v1.gateway_tenants,
     helm_release.vllm_stack,
     terraform_data.fastapi_image,
   ]

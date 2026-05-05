@@ -3,10 +3,14 @@ output "gateway_url" {
   value       = "http://${kubernetes_service_v1.gateway_lb.status[0].load_balancer[0].ingress[0].hostname}"
 }
 
-output "gateway_bearer_token" {
-  description = "Bearer token for Authorization header"
-  value       = var.gateway_bearer_token
+output "tenant_keys_export" {
+  description = "Source-able shell snippet that exports TENANT_A/B/C_KEY for the laptop scenario harness"
   sensitive   = true
+  value = join("\n", [
+    "export TENANT_A_KEY='${random_password.tenant_keys["tenant-a"].result}'",
+    "export TENANT_B_KEY='${random_password.tenant_keys["tenant-b"].result}'",
+    "export TENANT_C_KEY='${random_password.tenant_keys["tenant-c"].result}'",
+  ])
 }
 
 output "ecr_url" {

@@ -1,0 +1,20 @@
+total_duration_s: 360
+tenants:
+  - id: tenant-a
+    role: steady_victim
+    start_offset_s: 0
+    duration_s: 360
+    request_rate: 5
+    num_prompts: 1800
+  - id: tenant-b
+    role: bursty_attacker
+    start_offset_s: 120
+    duration_s: 60
+    request_rate: 30
+    num_prompts: 1800
+  - id: tenant-c
+    role: steady_background
+    start_offset_s: 0
+    duration_s: 360
+    request_rate: 3
+    num_prompts: 1080

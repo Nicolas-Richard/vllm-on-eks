@@ -1,0 +1,28 @@
+# Layered Layer-1 + Layer-2 demo. Heavy enough to make capacity scarce so
+# DRR's weighted dispatch matters, and so AIMD has real work to do.
+#
+# Phase 1 (0–60s):    B alone at 6 rps. Saturating but absorbable. AIMD
+#                     climbs cap toward equilibrium. B's TTFT comfortable
+#                     since it has no contention.
+# Phase 2 (60–120s):  A joins at 4 rps. Combined 10 rps offered. DRR's
+#                     weight ratio (A=2, B=1) hands A two-thirds of the
+#                     dispatches; A's TTFT stays under SLO while B *yields*
+#                     capacity and its TTFT climbs.
+# Phase 3 (120–240s): A leaves. B reclaims its full DRR share. B's TTFT
+#                     drops back to phase-1 levels — work conservation: the
+#                     capacity returns to whoever still has demand.
+
+total_duration_s: 240
+tenants:
+  - id: tenant-b
+    role: free_tier_baseline
+    start_offset_s: 0
+    duration_s: 240
+    request_rate: 6
+    num_prompts: 1440
+  - id: tenant-a
+    role: paying_late_joiner
+    start_offset_s: 60
+    duration_s: 60
+    request_rate: 4
+    num_prompts: 240

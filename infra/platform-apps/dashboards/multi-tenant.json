@@ -1,0 +1,173 @@
+{
+  "title": "Multi-Tenant Gateway",
+  "uid": "multi-tenant",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-15m", "to": "now" },
+  "refresh": "5s",
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Requests received by tenant",
+      "description": "Incoming request rate per tenant, recorded at middleware entry before any processing or queueing. This is the load each tenant is *trying* to send. Differs from completed/in-flight when the gateway is queueing or shedding (e.g., under cap binding, B may try to send 30 rps while only 0.8 rps complete).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (tenant_id) (rate(gateway_requests_received_total{route=~\"/v1/.*\", tenant_id!=\"unknown\"}[15s]))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "In-flight requests by tenant",
+      "description": "Concurrent in-flight requests per tenant. Includes requests currently waiting on the per-tenant semaphore. With caps ON during a burst, the attacker's line swells past its cap (queueing) before timing out at 30s; well-behaved tenants stay near their natural in-flight count.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (tenant_id) (gateway_inflight_requests{tenant_id!=\"unknown\"})",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "TTFT p99 by tenant",
+      "description": "Time from gateway receipt to first response chunk, p99 over a 2-minute window. Headline latency metric for the noisy-neighbor demo: tenant-A's line should collapse during tenant-B's burst with caps OFF and stay flat with caps ON.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.99, sum by (tenant_id, le) (rate(gateway_ttft_seconds_bucket[15s])))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "E2E latency p99 by tenant",
+      "description": "End-to-end request duration (receipt → last byte sent), p99 over a 2-minute window. Includes streaming time, so values exceed TTFT. With caps OFF and tenant-B bursting, queue depth pushes E2E for everyone into minutes.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.99, sum by (tenant_id, le) (rate(gateway_request_duration_seconds_bucket{route=~\"/v1/.*\"}[15s])))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Completed stream rate by tenant",
+      "description": "Streaming responses per second that finished cleanly (final chunk delivered to client), by tenant_id. Unlike status=200, this excludes mid-stream truncations — the truthful SLO success metric.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (tenant_id) (rate(gateway_stream_completed_total{completed=\"true\", tenant_id!=\"unknown\"}[15s]))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Failure rate by tenant",
+      "description": "Failed responses per second, by tenant_id and failure mode, over a 2-minute window. status=504 = gateway semaphore timeout (cap+30s wait); status=5xx = upstream vLLM error code; truncated = 200 OK header but body cut off mid-stream. Unauthenticated 401s filtered out.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineInterpolation": "smooth", "fillOpacity": 10, "stacking": { "mode": "none" } }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (tenant_id, status) (rate(gateway_requests_total{status!=\"200\", route=~\"/v1/.*\", tenant_id!=\"unknown\"}[15s]))",
+          "legendFormat": "{{tenant_id}} · {{status}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (tenant_id) (rate(gateway_stream_completed_total{completed=\"false\"}[15s]))",
+          "legendFormat": "{{tenant_id}} · truncated"
+        }
+      ]
+    }
+  ]
+}

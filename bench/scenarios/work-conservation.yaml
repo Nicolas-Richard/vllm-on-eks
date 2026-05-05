@@ -1,0 +1,14 @@
+total_duration_s: 180
+tenants:
+  - id: tenant-b
+    role: solo_then_shared
+    start_offset_s: 0
+    duration_s: 180
+    request_rate: 7.5
+    num_prompts: 1350
+  - id: tenant-a
+    role: late_joiner
+    start_offset_s: 60
+    duration_s: 60
+    request_rate: 7.5
+    num_prompts: 450

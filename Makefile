@@ -1,11 +1,13 @@
 SHELL          := /bin/bash
 REGION         := us-east-1
-PROFILE        := sandbox-admin
+PROFILE        := <AWS_PROFILE>
 PLATFORM_DIR   := infra/platform-apps
+FOUNDATION_DIR := infra/eks-foundation
 
-.PHONY: deploy ecr-bootstrap terraform-apply destroy gateway-url gateway-token gateway-info gateway-test gateway-chat
+.PHONY: deploy ecr-bootstrap terraform-apply destroy gateway-url gateway-token gateway-info gateway-test gateway-chat gpu-scale-down gpu-scale-up bench-sweep bench-sweep-gateway bench-c
 
 PROMPT ?= Say hello in 5 words.
+C      ?= 16
 
 deploy: ecr-bootstrap terraform-apply
 
@@ -26,7 +28,7 @@ gateway-url:
 	@cd $(PLATFORM_DIR) && terraform output -raw gateway_url
 
 gateway-token:
-	@cd $(PLATFORM_DIR) && terraform output -raw gateway_bearer_token
+	@cd $(PLATFORM_DIR) && terraform output -raw tenant_keys_export | grep TENANT_A_KEY | cut -d"'" -f2
 
 gateway-info:
 	@printf 'URL:   %s\n' "$$($(MAKE) -s gateway-url)"
@@ -53,3 +55,21 @@ gateway-chat:
 	    "$$URL/v1/chat/completions" \
 	  | jq -j --unbuffered -nR 'inputs | select(startswith("data: ")) | ltrimstr("data: ") | select(. != "[DONE]") | fromjson | .choices[0].delta.content // empty'; \
 	  echo
+
+gpu-scale-down:
+	cd $(FOUNDATION_DIR) && AWS_PROFILE=$(PROFILE) terraform apply -var=gpu_desired_size=0 -auto-approve
+
+gpu-scale-up:
+	cd $(FOUNDATION_DIR) && AWS_PROFILE=$(PROFILE) terraform apply -var=gpu_desired_size=2 -auto-approve
+
+# Full router-direct concurrency sweep (4,8,16,32,64,128) with C=1 warmup.
+bench-sweep:
+	./bench/run_full_sweep.sh router-direct
+
+# Full sweep against the FastAPI gateway instead of the router.
+bench-sweep-gateway:
+	./bench/run_full_sweep.sh gateway
+
+# One-off run at C=$(C) (default 16) — useful for spot-checking dashboards.
+bench-c:
+	./bench/run_full_sweep.sh router-direct --single $(C)

@@ -1,14 +1,24 @@
-import os
+from __future__ import annotations
 
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, Request, status
 
-BEARER_TOKEN = os.environ.get("BEARER_TOKEN", "")
+from app.tenants import Tenant
 
 
-def require_bearer_token(authorization: str | None = Header(default=None)) -> None:
-    expected = f"Bearer {BEARER_TOKEN}"
-    if not BEARER_TOKEN or authorization != expected:
+async def require_tenant(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> Tenant:
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing bearer token",
         )
+    token = authorization[len("Bearer "):]
+    tenant = request.app.state.registry.resolve(token)
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing bearer token",
+        )
+    return tenant
