@@ -1,9 +1,17 @@
 # vllm-on-eks
 
-A multi-tenant LLM inference stack on EKS: vLLM serving Qwen2.5-7B behind a
-FastAPI gateway that does per-tenant weighted fair queueing (DRR) and an AIMD
-admission controller that adapts concurrency to a p99 TTFT target. Drop-in
-benchmark harness for reproducing the experiments.
+The companion code for a blog series on running multi-tenant LLM inference on
+EKS: vLLM serving Qwen2.5-7B behind a FastAPI gateway that does per-tenant
+weighted fair queueing (DRR) and an AIMD admission controller that adapts
+concurrency to a p99 TTFT target. Drop-in benchmark harness for reproducing the
+experiments.
+
+## The blog series
+
+1. [Streaming LLM inference on EKS](https://nicolas-richard.github.io/posts/streaming-llm-inference-on-eks.html) — the build: VPC, EKS, vLLM Production Stack, and the streaming gateway.
+2. [How much can two L4s serve? It depends on the prompt.](https://nicolas-richard.github.io/posts/how-much-can-two-nvidia-l4s-serve.html) — capacity, prefix caching, and the methodology trap.
+3. [Per-tenant concurrency caps](https://nicolas-richard.github.io/posts/per-tenant-concurrency-caps.html) — protecting well-behaved tenants from a bursty neighbor.
+4. [Adaptive concurrency on a multi-tenant vLLM gateway: WFQ + AIMD against a TTFT SLO](https://nicolas-richard.github.io/posts/adaptive-concurrency-wfq-aimd-ttft-slo.html) — the self-tuning gateway.
 
 ## Layout
 
@@ -60,18 +68,3 @@ Output lands at `bench/runs/<run-id>/{manifest.json,tenant-*.json,tenant-*.log}`
 See `bench/README.md` for the harness layout and the available scenarios under
 `bench/scenarios/`.
 
-## Optional: Hugging Face token
-
-`vllm bench serve` re-downloads the model tokenizer on every invocation. Three
-concurrent bench processes can race on the same anonymous download and one
-will fail with `OSError: Unable to load vocabulary from file`. To avoid that,
-set an `HF_TOKEN` (read-scoped is enough) on the runner pod:
-
-```bash
-kubectl -n benchmarks create secret generic huggingface-token \
-  --from-literal=HF_TOKEN=hf_xxx
-kubectl -n benchmarks rollout restart deploy/benchmarks-runner
-```
-
-The runner references the secret with `optional: true`, so this is not blocking
-— skip if you're only running one bench at a time.
