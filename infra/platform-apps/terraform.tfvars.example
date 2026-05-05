@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars (gitignored) and fill in real values.
+gateway_bearer_token       = "REPLACE_WITH_openssl_rand_-hex_32"
+loadbalancer_source_ranges = ["YOUR.PUBLIC.IP/32"]

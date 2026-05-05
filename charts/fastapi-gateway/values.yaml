@@ -1,0 +1,29 @@
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+bearerSecret:
+  name: gateway-auth
+  key: bearer-token
+
+router:
+  url: "http://vllm-router.vllm.svc.cluster.local:80"
+
+resources:
+  requests:
+    cpu: "200m"
+    memory: "256Mi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
+
+nodeSelector:
+  workload: cpu
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000

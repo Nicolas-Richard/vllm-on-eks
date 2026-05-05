@@ -1,0 +1,16 @@
+flowchart LR
+    client[Client<br/>curl -N]
+    nlb[Public NLB<br/>L4, source-range allowlist]
+    gw[FastAPI gateway<br/>streaming proxy + bearer auth]
+    router[vLLM Production Stack<br/>router, prefix-aware]
+    w1[vLLM worker A<br/>Qwen2.5-7B BF16<br/>1× L4]
+    w2[vLLM worker B<br/>Qwen2.5-7B BF16<br/>1× L4]
+
+    client -->|HTTPS, SSE| nlb
+    nlb -->|TCP, no buffering| gw
+    gw -->|httpx async stream| router
+    router -->|prefix-aware<br/>routing| w1
+    router -->|prefix-aware<br/>routing| w2
+
+    classDef gpu fill:#1f3b3a,stroke:#76b900,color:#fff
+    class w1,w2 gpu

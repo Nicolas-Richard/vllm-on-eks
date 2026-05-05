@@ -1,0 +1,6 @@
+apiVersion: v2
+name: fastapi-gateway
+description: FastAPI streaming gateway for vLLM Production Stack
+type: application
+version: "0.1.0"
+appVersion: "0.1.0"
