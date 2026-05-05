@@ -2,21 +2,66 @@
   "title": "GPU Health",
   "uid": "gpu-health",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 3,
   "time": { "from": "now-1h", "to": "now" },
   "timezone": "browser",
   "panels": [
     {
-      "id": 1,
+      "id": 10,
       "type": "timeseries",
-      "title": "GPU utilisation (%) per node",
+      "title": "Tensor core utilisation per node (PIPE_TENSOR_ACTIVE)",
+      "description": "Fraction of cycles the tensor (HMMA) pipe is active. The honest 'are we using the FLOPs we're paying for' metric. For LLM decode this typically sits at 30-60% — decode is memory-bound, not compute-bound, so tensor cores spend a lot of time waiting on weights to arrive from VRAM.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1 },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "amp" },
-          "expr": "DCGM_FI_DEV_GPU_UTIL",
+          "expr": "DCGM_FI_PROF_PIPE_TENSOR_ACTIVE",
+          "legendFormat": "{{Hostname}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Memory bandwidth utilisation per node (DRAM_ACTIVE)",
+      "description": "Fraction of cycles the device memory interface is active sending/receiving data. The bottleneck metric for LLM decode — each decode step has to read all the model's weights through the memory bus. When this approaches 1.0 the GPU is bandwidth-saturated and adding concurrency starts inflating ITL.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1 },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "DCGM_FI_PROF_DRAM_ACTIVE",
+          "legendFormat": "{{Hostname}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Power draw vs TDP per node (L4 = 72 W)",
+      "description": "Fraction of L4's 72 W power envelope. NVIDIA L4 is a low-power inference card; at sustained load it sits near the power limit. If this panel is consistently >0.9 the GPU may be clock-throttling.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1.1 },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "DCGM_FI_DEV_POWER_USAGE / 72",
           "legendFormat": "{{Hostname}}"
         }
       ]
@@ -25,7 +70,8 @@
       "id": 2,
       "type": "timeseries",
       "title": "GPU memory used (GB) per node",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "description": "Framebuffer used. Stable at ~21 GiB during inference — the model weights plus the pre-allocated KV cache pool. Doesn't grow with traffic; the pool is sized at startup.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "amp" },
       "targets": [
         {
@@ -40,7 +86,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "GPU temperature (°C) per node",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
       "datasource": { "type": "prometheus", "uid": "amp" },
       "targets": [
         {
@@ -55,8 +101,12 @@
       "id": 4,
       "type": "timeseries",
       "title": "GPU power draw (W) per node",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": { "unit": "watt" },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",

@@ -6,7 +6,7 @@ stack on top of the EKS foundation built by `infra/eks-foundation`.
 ## Prerequisites
 
 - Sub-project A (`infra/eks-foundation`) applied successfully.
-- `aws sso login --profile sandbox-admin`.
+- `aws sso login --profile ChimeSandbox-Administrator`.
 - Docker running locally.
 - A `terraform.tfvars` filled in (see `terraform.tfvars.example`).
 

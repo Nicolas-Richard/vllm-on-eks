@@ -2,7 +2,7 @@
 # account-specific). Filtering by the well-known path narrows it to the
 # one Identity-Center-provisioned role.
 data "aws_iam_roles" "okta_admin" {
-  name_regex  = "AWSReservedSSO_AdministratorAccess_.*"
+  name_regex  = "AWSReservedSSO_Okta-Administrator_.*"
   path_prefix = "/aws-reserved/sso.amazonaws.com/"
 }
 

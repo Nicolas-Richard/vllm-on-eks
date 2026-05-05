@@ -1,0 +1,98 @@
+{
+  "title": "FastAPI Gateway",
+  "uid": "gateway",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Request rate by status",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (status) (rate(gateway_requests_total[1m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Chat completions latency",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(gateway_request_duration_seconds_bucket{route=\"/v1/chat/completions\"}[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(gateway_request_duration_seconds_bucket{route=\"/v1/chat/completions\"}[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(gateway_request_duration_seconds_bucket{route=\"/v1/chat/completions\"}[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "In-flight requests",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum(gateway_inflight_requests)",
+          "legendFormat": "in-flight"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Top routes by request rate",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "topk(10, sum by (route) (rate(gateway_requests_total[5m])))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    }
+  ]
+}

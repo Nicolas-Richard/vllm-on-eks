@@ -23,22 +23,37 @@ def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-@app.middleware("http")
-async def observability_middleware(request: Request, call_next):
-    if request.url.path == "/metrics":
-        return await call_next(request)
-    inflight_requests.inc()
-    started = time.perf_counter()
-    response = None
-    try:
-        response = await call_next(request)
-        return response
-    finally:
-        elapsed = time.perf_counter() - started
-        route = request.url.path
-        requests_total.labels(route=route, status=str(getattr(response, "status_code", "exc"))).inc()
-        request_duration_seconds.labels(route=route).observe(elapsed)
-        inflight_requests.dec()
+class ObservabilityMiddleware:
+    # Pure ASGI middleware: BaseHTTPMiddleware (i.e. @app.middleware("http"))
+    # returns from call_next as soon as the response object is constructed,
+    # not when the body is fully streamed — which makes inflight_requests
+    # and request_duration_seconds wrong for StreamingResponse.
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["path"] == "/metrics":
+            await self.app(scope, receive, send)
+            return
+
+        status = {"code": "exc"}
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                status["code"] = str(message["status"])
+            await send(message)
+
+        inflight_requests.inc()
+        started = time.perf_counter()
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            request_duration_seconds.labels(route=scope["path"]).observe(time.perf_counter() - started)
+            requests_total.labels(route=scope["path"], status=status["code"]).inc()
+            inflight_requests.dec()
+
+
+app.add_middleware(ObservabilityMiddleware)
 
 
 @app.get("/healthz")

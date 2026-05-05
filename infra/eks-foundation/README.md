@@ -4,15 +4,15 @@ Sub-project A of the vLLM-on-EKS effort. See `../../docs/superpowers/specs/2026-
 
 ## Prerequisites
 
-- AWS profile `sandbox-admin` (account `123456789012`)
+- AWS profile `ChimeSandbox-Administrator` (account `110535878513`)
 - Terraform `~> 1.7`
 - `kubectl`, `aws` CLI
 
 ## Bring up
 
 ```bash
-aws sso login --profile sandbox-admin
-export AWS_PROFILE=sandbox-admin
+aws sso login --profile ChimeSandbox-Administrator
+export AWS_PROFILE=ChimeSandbox-Administrator
 
 terraform init
 terraform apply

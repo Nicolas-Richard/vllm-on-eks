@@ -84,6 +84,10 @@ resource "helm_release" "prometheus_agent" {
                 regex         = "8000"
                 action        = "keep"
               },
+              {
+                source_labels = ["__meta_kubernetes_pod_name"]
+                target_label  = "pod"
+              },
             ]
             metrics_path = "/metrics"
           },
@@ -101,6 +105,10 @@ resource "helm_release" "prometheus_agent" {
                 regex         = "vllm-stack"
                 action        = "keep"
               },
+              {
+                source_labels = ["__meta_kubernetes_pod_name"]
+                target_label  = "pod"
+              },
             ]
           },
           {
@@ -111,6 +119,10 @@ resource "helm_release" "prometheus_agent" {
                 source_labels = ["__meta_kubernetes_pod_label_app"]
                 regex         = "fastapi-gateway"
                 action        = "keep"
+              },
+              {
+                source_labels = ["__meta_kubernetes_pod_name"]
+                target_label  = "pod"
               },
             ]
           },
@@ -127,6 +139,10 @@ resource "helm_release" "prometheus_agent" {
                 source_labels = ["__meta_kubernetes_pod_container_port_number"]
                 regex         = "9400"
                 action        = "keep"
+              },
+              {
+                source_labels = ["__meta_kubernetes_pod_name"]
+                target_label  = "pod"
               },
             ]
           },

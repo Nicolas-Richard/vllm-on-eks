@@ -2,7 +2,7 @@
   "title": "vLLM Worker Comparison",
   "uid": "worker-comparison",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "time": { "from": "now-1h", "to": "now" },
   "timezone": "browser",
   "panels": [
@@ -40,8 +40,17 @@
       "id": 3,
       "type": "timeseries",
       "title": "KV-cache utilisation per worker",
+      "description": "vllm:kv_cache_usage_perc is reported as a fraction in [0, 1] despite the _perc suffix; panel unit is set to percentunit so 0.13 renders as 13%.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -55,13 +64,22 @@
       "id": 4,
       "type": "timeseries",
       "title": "Prefix-cache hit rate per worker",
+      "description": "Cumulative since pod start: hit tokens / queried tokens. Both counters are in token units per vLLM's metric definition.",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "amp" },
-          "expr": "rate(vllm:gpu_prefix_cache_hits_total[5m]) / clamp_min(rate(vllm:gpu_prefix_cache_queries_total[5m]), 1)",
+          "expr": "sum by (pod) (vllm:prefix_cache_hits_total) / clamp_min(sum by (pod) (vllm:prefix_cache_queries_total), 1)",
           "legendFormat": "{{pod}}"
         }
       ]
@@ -78,6 +96,86 @@
           "datasource": { "type": "prometheus", "uid": "amp" },
           "expr": "vllm:num_requests_waiting",
           "legendFormat": "{{pod}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Preemptions per worker (rate)",
+      "description": "Rate of vllm:num_preemptions_total. Non-zero means the scheduler is evicting running sequences (KV pressure) — a direct signal that you're past the knee.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "sum by (pod) (rate(vllm:num_preemptions_total[5m]))",
+          "legendFormat": "{{pod}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Request phase time p50 (queue / prefill / decode)",
+      "description": "Median time per request spent in each phase, fleet-aggregated. queue+prefill+decode ≈ e2e latency. If queue dominates → demand exceeds capacity (add workers). If decode dominates → batch contention/preemption.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:request_queue_time_seconds_bucket[5m])))",
+          "legendFormat": "queue"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:request_prefill_time_seconds_bucket[5m])))",
+          "legendFormat": "prefill"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(vllm:request_decode_time_seconds_bucket[5m])))",
+          "legendFormat": "decode"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Request phase time p95 (queue / prefill / decode)",
+      "description": "p95 time per request spent in each phase, fleet-aggregated. The shape of the tail tells you which phase is the bottleneck under load.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "amp" },
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:request_queue_time_seconds_bucket[5m])))",
+          "legendFormat": "queue"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:request_prefill_time_seconds_bucket[5m])))",
+          "legendFormat": "prefill"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "amp" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:request_decode_time_seconds_bucket[5m])))",
+          "legendFormat": "decode"
         }
       ]
     }
