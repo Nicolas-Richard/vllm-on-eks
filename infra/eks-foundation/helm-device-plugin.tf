@@ -30,7 +30,6 @@ resource "helm_release" "nvidia_device_plugin" {
   })]
 
   depends_on = [
-    aws_eks_node_group.gpu,
     aws_eks_addon.vpc_cni,
     aws_eks_addon.coredns,
     aws_eks_addon.kube_proxy,

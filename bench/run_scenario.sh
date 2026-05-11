@@ -62,11 +62,42 @@ DEPLOY="deploy/benchmarks-runner"
 GATEWAY_URL="http://fastapi-gateway.vllm.svc.cluster.local:80"
 MODEL="Qwen/Qwen2.5-7B-Instruct"
 
+# Ctrl-C of this script kills the local kubectl exec processes, but
+# `vllm bench serve` running inside the benchmarks pod is a child of
+# kubelet — it doesn't reliably get a signal when the exec stream drops.
+# This trap reaches into the pod and kills any leftover bench process so
+# Ctrl-C actually stops the work, not just our view of it.
+cleanup_remote_bench() {
+  kubectl --context "$KUBE_CONTEXT" -n "$NS" exec "$DEPLOY" -- \
+    pkill -f "vllm bench" 2>/dev/null || true
+}
+trap cleanup_remote_bench INT TERM
+
 LOCAL_DIR="bench/runs/${RUN_ID}"
 POD_DIR="/results/${RUN_ID}"
 mkdir -p "$LOCAL_DIR"
 
 TENANT_COUNT="$(yq -r '.tenants | length' "$SCENARIO")"
+
+# Prompt shape (random input / output token counts). Defaults to 512:128 — the
+# "please summarize this" shape — when the scenario doesn't specify. Scenarios
+# can override at the top level (e.g. input_len: 128, output_len: 128 for a
+# "Q&A" shape that completes ~4× faster per request).
+INPUT_LEN="$(yq -r '.input_len // 512' "$SCENARIO")"
+OUTPUT_LEN="$(yq -r '.output_len // 128' "$SCENARIO")"
+echo "[shape] random-input-len=${INPUT_LEN} random-output-len=${OUTPUT_LEN}"
+
+# Pre-flight: refuse to start a scenario unless the full GPU fleet is Ready.
+# A scale-up event with a cold Karpenter node pays a ~9 min ECR pull for the
+# 21 GB vLLM image; if the bench launches partway through, only one engine
+# serves and the router round-robins to itself → gateway 504-storms → liveness
+# probe kills the gateway → in-flight state is lost. Gate on both Deployments
+# reaching their declared replica count before touching the gateway.
+echo "[preflight] waiting for vllm engine + headroom Deployments to be fully Ready..."
+kubectl --context "$KUBE_CONTEXT" -n vllm rollout status \
+  deploy/vllm-stack-qwen25-7b-deployment-vllm --timeout=15m
+kubectl --context "$KUBE_CONTEXT" -n vllm rollout status \
+  deploy/vllm-headroom --timeout=15m
 
 # Reset gateway in-process state (AIMD cap, histogram window, scheduler queues)
 # so each scenario starts from the bootstrap config. Without this, AIMD's cap
@@ -108,7 +139,7 @@ for i in $(seq 0 $((TENANT_COUNT - 1))); do
         --backend openai-chat --endpoint /v1/chat/completions \
         --base-url '${GATEWAY_URL}' \
         --model '${MODEL}' \
-        --dataset-name random --random-input-len 512 --random-output-len 128 \
+        --dataset-name random --random-input-len ${INPUT_LEN} --random-output-len ${OUTPUT_LEN} \
         --request-rate ${RATE} --num-prompts ${NPROMPTS} \
         --metric-percentiles 50,99 \
         --save-result --result-filename '${OUT_POD}'

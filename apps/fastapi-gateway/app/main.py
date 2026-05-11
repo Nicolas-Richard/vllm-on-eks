@@ -28,7 +28,6 @@ from app.proxy import proxy_to_router
 from app.tenants import Tenant, TenantRegistry, load_registry
 
 TENANTS_PATH = os.environ.get("TENANTS_PATH", "/etc/gateway/tenants.yaml")
-ACQUIRE_TIMEOUT_S = float(os.environ.get("ACQUIRE_TIMEOUT_S", "30"))
 
 # Routes the gateway proxies. Used to pre-create labeled series so that
 # rate()/increase() in Prometheus have a baseline value of 0 from startup
@@ -67,7 +66,10 @@ def _prewarm_metrics(registry: TenantRegistry) -> None:
 async def lifespan(app: FastAPI):
     registry = load_registry(Path(TENANTS_PATH))
     app.state.registry = registry
-    scheduler = TenantScheduler(registry, acquire_timeout_s=ACQUIRE_TIMEOUT_S)
+    scheduler = TenantScheduler(
+        registry,
+        acquire_timeout_s=registry.global_budget_config().acquire_timeout_s,
+    )
     await scheduler.start()
     app.state.scheduler = scheduler
 
@@ -86,7 +88,7 @@ async def lifespan(app: FastAPI):
             cap_max=aimd_cfg.cap_per_worker_max,
             target_band_pct=aimd_cfg.target_band_pct,
             cooldown_ticks=aimd_cfg.cooldown_ticks,
-            decrease_step=aimd_cfg.decrease_step,
+            decrease_factor=aimd_cfg.decrease_factor,
         )
         await aimd.start()
     app.state.aimd = aimd

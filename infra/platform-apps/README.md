@@ -15,18 +15,27 @@ stack on top of the EKS foundation built by `infra/eks-foundation`.
 From the repo root:
 
 ```bash
+# 1. Inference stack + gateway + observability.
+#    - bootstraps the gateway ECR repo
+#    - builds + pushes apps/fastapi-gateway via terraform_data (hash-keyed,
+#      so the image tag only churns when the gateway source changes)
+#    - applies vllm-stack, dcgm-exporter, grafana, prometheus-agent
 make deploy
+
+# 2. Bake the custom vLLM image (Qwen2.5-7B weights baked in).
+#    Requires huggingface_token in terraform.tfvars. ~10–30 min first run.
+make vllm-image
+
+# 3. Install Karpenter and the GPU NodePool / NodeClass.
+#    GPU nodes are provisioned on demand from this point on.
+make karpenter-up
+
+# 4. Install KEDA + the ScaledObject driven by the AMP queue-depth signal.
+make keda-up
 ```
 
-This runs:
-
-1. `terraform apply -target=aws_ecr_repository.fastapi` — creates the ECR repo.
-2. `terraform apply` — full module. Terraform builds and pushes
-   `apps/fastapi-gateway` to ECR via a `terraform_data` resource keyed on a
-   content hash of the gateway sources, so the image tag (and helm upgrade)
-   only churns when those files actually change.
-
-Total: ~10–15 min cold start.
+`make deploy` alone is ~10–15 min cold start; the autoscaling steps add
+another ~10–30 min depending on the vLLM image bake.
 
 ## Use the gateway
 
@@ -68,15 +77,17 @@ kubectl -n monitoring get secret grafana -o jsonpath='{.data.admin-password}' | 
 
 ## Scale GPUs to zero between sessions
 
-Done in **A**, not here:
+Karpenter provisions GPU nodes (`gpu-l4` NodePool) in response to pod demand,
+so taking GPU spend to ~$0 means scaling the vLLM engine and headroom
+warm-pool deployments to 0; Karpenter consolidates the freed nodes.
 
 ```bash
-cd ../eks-foundation
-terraform apply -var gpu_desired_size=0
+make gpu-scale-down   # vllm_replicas=0, headroom_replicas=0
+make gpu-scale-up     # back to 2 + 2
 ```
 
-vLLM worker pods will Pend. NLB stays up. Prometheus agent sees fewer targets.
-Bring back: `terraform apply -var gpu_desired_size=2`.
+Under the hood: `terraform apply -var=vllm_replicas=… -var=headroom_replicas=…`
+in this module. NLB stays up; Prometheus agent sees fewer targets while down.
 
 ## Destroy
 

@@ -72,7 +72,11 @@ resource "helm_release" "fastapi_gateway" {
     # OOMKilled mid-run; 2Gi survives. (A future refactor reusing one
     # AsyncClient across requests would lower the steady-state footprint.)
     resources = {
-      requests = { cpu = "200m", memory = "256Mi" }
+      # Doubled CPU request from 200m → 400m. Under sustained load the
+      # gateway's asyncio event loop genuinely needs more guaranteed CPU than
+      # 200m can provide — kubelet was throttling the process enough that
+      # /healthz couldn't get scheduled within the probe timeout.
+      requests = { cpu = "400m", memory = "256Mi" }
       limits   = { cpu = "2", memory = "2Gi" }
     }
 

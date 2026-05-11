@@ -9,3 +9,5 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 .DS_Store
+infra/platform-apps/vllm-image/corp-ca.crt
+infra/platform-apps/.hf-token

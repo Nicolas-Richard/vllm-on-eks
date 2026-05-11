@@ -1,0 +1,32 @@
+# Sustained traffic for 15 minutes.
+#
+# Purpose: long, steady-state run with no bursts — useful for observing
+# AIMD's cap_per_worker drift over a long window, checking p99 TTFT
+# stability, and producing dashboards/screenshots that aren't dominated
+# by warmup transients.
+#
+# Two tenants at modest rates so the gateway is exercised end-to-end
+# (auth, DRR weights, AIMD ticks) without saturating the L4 budget.
+# Combined offered load ≈ 7 rps.
+#
+# vllm bench runs to num_prompts, not wall time, so num_prompts is sized
+# as request_rate × duration_s to fill the full 900s window.
+#
+# Run:
+#   ./bench/run_scenario.sh bench/scenarios/sustained-15min.yaml \
+#     --caps-enabled true
+
+total_duration_s: 900
+tenants:
+  - id: tenant-a
+    role: steady_paying
+    start_offset_s: 0
+    duration_s: 900
+    request_rate: 5
+    num_prompts: 4500
+  - id: tenant-c
+    role: steady_background
+    start_offset_s: 0
+    duration_s: 900
+    request_rate: 4
+    num_prompts: 1800

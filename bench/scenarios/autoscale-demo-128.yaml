@@ -1,0 +1,95 @@
+# Autoscaling demo — 128:128 prompt shape (Q&A workload).
+#
+# Same control-loop story as `autoscale-demo.yaml` (512:128 summarize
+# shape), but with the prompt shape changed to the much shorter
+# question/answer pattern. The control-loop machinery is identical;
+# what changes is the *per-engine capacity*:
+#
+# - 512:128 ("please summarize this"): prefill dominates briefly, then
+#   decode 128 tokens. Per-request E2E ~10-15s under steady load.
+# - 128:128 ("what is X?"): prefill is essentially free; per-request E2E
+#   ~6-10s (decode-only). KV-cache footprint per request is ~2.5x
+#   smaller, so the engine can run more concurrent sequences before
+#   hitting its KV-cache budget.
+#
+# Net: at the same in-flight count, 128:128 throughput is ~2× higher.
+# This scenario scales the load curve roughly ~2× from the 512:128
+# version so the autoscale event actually fires (2 engines at the
+# 6 rps baseline of the original would be ~80% idle at 128:128).
+#
+# Phase shape mirrors the original (warmup → baseline → ramp →
+# scale-up → ramp → overdrive → ramp ↓ → cooldown). Same ~24 min total.
+#
+# Run:
+#   ./bench/run_scenario.sh bench/scenarios/autoscale-demo-128.yaml \
+#     --caps-enabled true
+
+total_duration_s: 1410
+
+# Q&A prompt shape: 128 input tokens, 128 output tokens.
+input_len: 128
+output_len: 128
+
+tenants:
+  - id: tenant-a
+    role: warmup
+    start_offset_s: 0
+    duration_s: 30
+    request_rate: 5
+    num_prompts: 150
+
+  - id: tenant-a
+    role: baseline
+    start_offset_s: 30
+    duration_s: 180
+    request_rate: 12
+    num_prompts: 2160
+
+  - id: tenant-a
+    role: ramp_up_1
+    start_offset_s: 210
+    duration_s: 30
+    request_rate: 18
+    num_prompts: 540
+
+  - id: tenant-a
+    role: scale_up
+    start_offset_s: 240
+    duration_s: 300
+    request_rate: 24
+    num_prompts: 7200
+
+  - id: tenant-a
+    role: ramp_up_2
+    start_offset_s: 540
+    duration_s: 30
+    request_rate: 28
+    num_prompts: 840
+
+  - id: tenant-a
+    role: overdrive
+    start_offset_s: 570
+    duration_s: 180
+    request_rate: 32
+    num_prompts: 5760
+
+  - id: tenant-a
+    role: ramp_down_1
+    start_offset_s: 750
+    duration_s: 30
+    request_rate: 22
+    num_prompts: 660
+
+  - id: tenant-a
+    role: ramp_down_2
+    start_offset_s: 780
+    duration_s: 30
+    request_rate: 16
+    num_prompts: 480
+
+  - id: tenant-a
+    role: cooldown
+    start_offset_s: 810
+    duration_s: 600
+    request_rate: 12
+    num_prompts: 7200

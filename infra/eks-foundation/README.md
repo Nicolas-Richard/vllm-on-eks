@@ -1,6 +1,8 @@
 # eks-foundation
 
-Sub-project A of the vLLM-on-EKS effort. See `../../docs/superpowers/specs/2026-04-25-eks-foundation-design.md` for the full design.
+Sub-project A of the vLLM-on-EKS effort: VPC, EKS cluster, CPU node group,
+core addons. GPU nodes are provisioned by Karpenter (installed in sub-project
+B, `infra/platform-apps`), so a fresh apply here produces a CPU-only cluster.
 
 ## Prerequisites
 
@@ -25,22 +27,16 @@ $(terraform output -raw kubeconfig_command)
 kubectl get nodes
 ```
 
-Expect: 1 CPU node + 2 GPU nodes, all `Ready`.
+Expect: 1 CPU node, `Ready`. GPU nodes appear only after `infra/platform-apps`
+is applied (Karpenter provisions them on demand for the vLLM engine + headroom
+warm-pool pods).
 
-## Scale GPUs to zero (saves ~$1.50/hr)
+## Scale GPUs to zero
 
-```bash
-terraform apply -var gpu_desired_size=0
-```
-
-The cluster, CPU node, and Helm releases stay up. Device-plugin
-DaemonSet pods will sit pending until GPUs return — harmless.
-
-To bring GPUs back:
-
-```bash
-terraform apply -var gpu_desired_size=2
-```
+GPU nodes are owned by Karpenter and driven by the vLLM engine + headroom
+deployments in `infra/platform-apps`. Take GPU spend to ~$0 by scaling those
+deployments to zero — see `make gpu-scale-down` / `gpu-scale-up` at the repo
+root.
 
 ## Tear down completely
 
@@ -54,22 +50,12 @@ cluster is removed (handled by Terraform's reverse-graph traversal).
 ## Validation checklist
 
 ```bash
-# 1. Nodes ready
+# 1. Node ready
 kubectl get nodes
 
-# 2. GPUs schedulable
-kubectl get nodes -l workload=gpu \
-  -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}'
-# Expect: "1 1"
-
-# 3. Device plugin running
-kubectl get pods -n kube-system -l app.kubernetes.io/name=nvidia-device-plugin
-
-# 4. Add-ons ACTIVE
+# 2. Add-ons ACTIVE
 aws eks list-addons --cluster-name $(terraform output -raw cluster_name)
-
-# 5. End-to-end GPU smoke
-kubectl run gpu-smoke --rm -it --restart=Never \
-  --image=nvidia/cuda:12.4.0-base-ubuntu22.04 \
-  --overrides='{"spec":{"tolerations":[{"key":"nvidia.com/gpu","operator":"Exists"}],"containers":[{"name":"x","image":"nvidia/cuda:12.4.0-base-ubuntu22.04","command":["nvidia-smi"],"resources":{"limits":{"nvidia.com/gpu":1}}}]}}'
 ```
+
+GPU validation (device-plugin DaemonSet, schedulable GPUs, CUDA smoke test)
+lives with the Karpenter pool in `infra/platform-apps`.

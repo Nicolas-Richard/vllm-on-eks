@@ -1,0 +1,101 @@
+# Autoscaling demo — the "money shot" scenario for post #5.
+#
+# Same four-phase shape as before (6 → 12 → 16 → 6 rps) but with
+# transition steps between each plateau and a warmup at the front:
+#
+#   warmup    — 0–30s     — 2 rps   — ease in from idle; AIMD has a moment
+#                                     to settle before real load.
+#   baseline  — 30–210s   — 6 rps   — 2 engines, AIMD holds, queue ≈ 0.
+#   ramp ↑    — 210–240s  — 9 rps   — transition; KEDA's trigger may
+#                                     briefly waver but shouldn't fire.
+#   scale-up  — 240–540s  — 12 rps  — 2 engines saturate → queue fills
+#                                     → KEDA queue-depth trigger fires
+#                                     → preempts headroom → scale 2→3→4.
+#   ramp ↑    — 540–570s  — 14 rps
+#   overdrive — 570–750s  — 16 rps  — 4 engines at max, some shedding
+#                                     expected; shed-rate trigger active.
+#   ramp ↓    — 750–810s  — 11 → 8 rps (two 30s steps)
+#   cooldown  — 810–1410s — 6 rps   — load back to baseline; queue/shed
+#                                     drop to 0. HPA's 5-min stabilization
+#                                     elapses, then KEDA scales 4→2.
+#                                     Karpenter consolidates ~60s later.
+#
+# Total ~23.5 min. The transitions exist because launching 6 rps cold
+# from idle put requests into the gateway queue faster than AIMD could
+# expand cap_per_worker, producing spurious early shedding.
+#
+# vllm bench's --request-rate is the *injection* rate. num_prompts =
+# rate × duration sizes each phase to complete around its nominal end.
+#
+# All phases use id=tenant-a (one tenant, one key). run_scenario.sh
+# writes to /results/<run-id>/tenant-a.json, overwritten by the last
+# phase; the Grafana time series is the artifact we care about.
+#
+# Run:
+#   ./bench/run_scenario.sh bench/scenarios/autoscale-demo.yaml \
+#     --caps-enabled true
+
+total_duration_s: 1410
+tenants:
+  - id: tenant-a
+    role: warmup
+    start_offset_s: 0
+    duration_s: 30
+    request_rate: 2
+    num_prompts: 60
+
+  - id: tenant-a
+    role: baseline
+    start_offset_s: 30
+    duration_s: 180
+    request_rate: 6
+    num_prompts: 1080
+
+  - id: tenant-a
+    role: ramp_up_1
+    start_offset_s: 210
+    duration_s: 30
+    request_rate: 9
+    num_prompts: 270
+
+  - id: tenant-a
+    role: scale_up
+    start_offset_s: 240
+    duration_s: 300
+    request_rate: 12
+    num_prompts: 3600
+
+  - id: tenant-a
+    role: ramp_up_2
+    start_offset_s: 540
+    duration_s: 30
+    request_rate: 14
+    num_prompts: 420
+
+  - id: tenant-a
+    role: overdrive
+    start_offset_s: 570
+    duration_s: 180
+    request_rate: 16
+    num_prompts: 2880
+
+  - id: tenant-a
+    role: ramp_down_1
+    start_offset_s: 750
+    duration_s: 30
+    request_rate: 11
+    num_prompts: 330
+
+  - id: tenant-a
+    role: ramp_down_2
+    start_offset_s: 780
+    duration_s: 30
+    request_rate: 8
+    num_prompts: 240
+
+  - id: tenant-a
+    role: cooldown
+    start_offset_s: 810
+    duration_s: 600
+    request_rate: 6
+    num_prompts: 3600

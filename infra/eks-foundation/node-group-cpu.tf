@@ -40,7 +40,7 @@ resource "aws_eks_node_group" "cpu" {
   node_role_arn   = aws_iam_role.node.arn
   subnet_ids      = [local.workload_subnet_id]
 
-  instance_types = ["t3.large"]
+  instance_types = ["t3.xlarge"]
   ami_type       = "AL2023_x86_64_STANDARD"
   capacity_type  = "ON_DEMAND"
   disk_size      = 150

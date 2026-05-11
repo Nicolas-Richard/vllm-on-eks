@@ -19,6 +19,11 @@ class Tenant:
 class GlobalBudgetConfig:
     num_workers: int
     cap_per_worker: int
+    # Per-request hard cap on queue wait time. Requests that sit in the
+    # per-tenant queue longer than this are 504'd. Should be << target_p99_ttft_s
+    # so a queued request that's about to time out has already broken its
+    # SLO budget — shedding aggressively is the right call.
+    acquire_timeout_s: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -35,10 +40,10 @@ class AIMDConfig:
     # After any non-hold action, force "hold" for this many ticks before the
     # next decision. 0 = no cooldown (act every tick).
     cooldown_ticks: int = 0
-    # Subtractive decrease step. cap -= decrease_step on each MD tick (subject
-    # to cap_per_worker_min floor). 1 = gentlest AISD; larger values approach
-    # classical halving for higher caps.
-    decrease_step: int = 1
+    # Multiplicative decrease factor. cap = floor(cap * decrease_factor) on
+    # each MD tick (subject to cap_per_worker_min floor). Must be in (0, 1).
+    # 0.5 = classical TCP halving; 0.75 = 25% cut per tick (gentler).
+    decrease_factor: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -57,7 +62,7 @@ _AIMD_DEFAULTS = AIMDConfig(
     cap_per_worker_max=64,
     target_band_pct=0.0,
     cooldown_ticks=0,
-    decrease_step=1,
+    decrease_factor=0.5,
 )
 
 _WATCHER_DEFAULTS = WorkerWatcherConfig(
@@ -121,10 +126,10 @@ def _parse_aimd(raw: dict | None) -> AIMDConfig:
             cap_per_worker_max=int(raw.get("cap_per_worker_max", _AIMD_DEFAULTS.cap_per_worker_max)),
             target_band_pct=float(raw.get("target_band_pct", _AIMD_DEFAULTS.target_band_pct)),
             cooldown_ticks=int(raw.get("cooldown_ticks", _AIMD_DEFAULTS.cooldown_ticks)),
-            decrease_step=int(raw.get("decrease_step", _AIMD_DEFAULTS.decrease_step)),
+            decrease_factor=float(raw.get("decrease_factor", _AIMD_DEFAULTS.decrease_factor)),
         )
-    # target_band_pct, cooldown_ticks, decrease_step are optional even when enabled.
-    optional = ("enabled", "target_band_pct", "cooldown_ticks", "decrease_step")
+    # target_band_pct, cooldown_ticks, decrease_factor are optional even when enabled.
+    optional = ("enabled", "target_band_pct", "cooldown_ticks", "decrease_factor")
     required = tuple(f.name for f in fields(AIMDConfig) if f.name not in optional)
     missing = [k for k in required if k not in raw]
     if missing:
@@ -140,7 +145,7 @@ def _parse_aimd(raw: dict | None) -> AIMDConfig:
         cap_per_worker_max=int(raw["cap_per_worker_max"]),
         target_band_pct=float(raw.get("target_band_pct", _AIMD_DEFAULTS.target_band_pct)),
         cooldown_ticks=int(raw.get("cooldown_ticks", _AIMD_DEFAULTS.cooldown_ticks)),
-        decrease_step=int(raw.get("decrease_step", _AIMD_DEFAULTS.decrease_step)),
+        decrease_factor=float(raw.get("decrease_factor", _AIMD_DEFAULTS.decrease_factor)),
     )
 
 
@@ -170,6 +175,7 @@ def load_registry(path: str | Path) -> TenantRegistry:
     global_budget = GlobalBudgetConfig(
         num_workers=int(raw["num_workers"]),
         cap_per_worker=int(raw["cap_per_worker"]),
+        acquire_timeout_s=float(raw.get("acquire_timeout_s", 1.0)),
     )
 
     aimd = _parse_aimd(raw.get("aimd"))

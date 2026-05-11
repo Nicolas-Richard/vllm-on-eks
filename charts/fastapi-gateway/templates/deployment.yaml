@@ -52,11 +52,22 @@ spec:
               port: http
             initialDelaySeconds: 2
             periodSeconds: 5
+            # /healthz is a sync no-op handler, but it still queues onto the
+            # FastAPI asyncio event loop. Under heavy proxy load (hundreds of
+            # in-flight streams), the loop's runnable queue can take >1s to
+            # reach a freshly-arrived /healthz. Default timeoutSeconds=1 is
+            # too tight for this; 5s leaves room without masking real hangs.
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /healthz
               port: http
             initialDelaySeconds: 10
             periodSeconds: 15
+            timeoutSeconds: 5
+            # 3 consecutive failures = ~45s before kill; gives the loop
+            # multiple chances to drain a transient backlog before kubelet
+            # restarts the container.
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

@@ -23,18 +23,18 @@ class AIMDController:
     ``window_s`` deque, compute p99 over the window's bucket-deltas, and
     adjust the cap:
 
-    - p99 > target * (1 + band)   → cap -= decrease_step (subtractive decrease).
+    - p99 > target * (1 + band)   → cap = floor(cap * decrease_factor)
+                                    (multiplicative decrease, classical AIMD).
     - p99 < target * (1 - band) *and* there is demand
                                   → cap += 1 (additive increase, demand-gated).
     - otherwise (deadband or no demand) → hold.
 
-    Subtractive (rather than multiplicative) decrease matches the cost
-    asymmetry of batched LLM serving: overshoot is graceful (tight queue
-    sheds 504s, KV preemption is bounded) but losing concurrency is
-    expensive (batching efficiency drops). A gentle -N step lets the
-    controller walk back toward the operating point without collapsing
-    throughput in one tick. Set ``decrease_step=cur//2`` to recover the
-    classical AIMD halving form; default 1 is the gentlest AISD posture.
+    Multiplicative decrease (TCP-style) cuts a *percentage* of the cap each
+    MD tick rather than a fixed step. When the cap is high and the system
+    is far past saturation, this contracts capacity fast enough to defend
+    the SLO; near ``cap_per_worker_min`` it converges to the floor without
+    overshooting. ``decrease_factor=0.5`` is classical TCP halving;
+    ``0.75`` is a gentler 25%-per-tick cut.
 
     After a *decrease* action, the next ``cooldown_ticks`` ticks are forced
     to "hold" so the previous step's effect can flush through the rolling
@@ -62,7 +62,7 @@ class AIMDController:
         cap_max: int = 64,
         target_band_pct: float = 0.0,
         cooldown_ticks: int = 0,
-        decrease_step: int = 1,
+        decrease_factor: float = 0.5,
     ) -> None:
         if tick_s <= 0:
             raise ValueError(f"tick_s must be > 0, got {tick_s}")
@@ -80,8 +80,10 @@ class AIMDController:
             )
         if cooldown_ticks < 0:
             raise ValueError(f"cooldown_ticks must be >= 0, got {cooldown_ticks}")
-        if decrease_step < 1:
-            raise ValueError(f"decrease_step must be >= 1, got {decrease_step}")
+        if not 0.0 < decrease_factor < 1.0:
+            raise ValueError(
+                f"decrease_factor must be in (0, 1), got {decrease_factor}"
+            )
         self._scheduler = scheduler
         self._hist = ttft_histogram
         self._target = target_p99_s
@@ -92,7 +94,7 @@ class AIMDController:
         self._upper = target_p99_s * (1.0 + target_band_pct)
         self._lower = target_p99_s * (1.0 - target_band_pct)
         self._cooldown_ticks = cooldown_ticks
-        self._decrease_step = decrease_step
+        self._decrease_factor = decrease_factor
         # Force-hold counter: ticks of "hold" remaining after the last
         # non-hold action. Decremented each tick.
         self._cooldown_remaining = 0
@@ -140,7 +142,7 @@ class AIMDController:
                 self._record_action("hold")
                 continue
             if p99 > self._upper:
-                new = max(self._cap_min, cur - self._decrease_step)
+                new = max(self._cap_min, int(cur * self._decrease_factor))
                 action = "decrease"
             elif self._scheduler.has_demand() and p99 < self._lower:
                 new = min(self._cap_max, cur + 1)

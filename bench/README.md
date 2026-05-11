@@ -7,10 +7,15 @@ tenant, defined by a YAML scenario file.
 ## Layout
 
 ```
-scenarios/                YAML scenarios + runbook
+scenarios/                YAML scenarios
   work-conservation-priority.yaml
   noisy-neighbor.yaml
   aimd-baseline.yaml
+  aimd-sustained-pressure.yaml
+  sustained-15min.yaml
+  tenant-a-20rps.yaml
+  autoscale-demo.yaml
+  autoscale-demo-128.yaml
   ...
 run_scenario.sh           launch one scenario; rolls gateway, runs
                           per-tenant benches, mirrors JSON back
@@ -26,4 +31,4 @@ runs/                     per-run output: <run-id>/{manifest.json,tenant-*.json,
 ```
 
 `--caps-enabled` is metadata only — flip the gateway ConfigMap and roll
-the pod separately. See `scenarios/README.md` for the full procedure.
+the pod separately.

@@ -1,2 +1,3 @@
 # Copy to terraform.tfvars (gitignored) and fill in real values.
 loadbalancer_source_ranges = ["YOUR.PUBLIC.IP/32"]
+huggingface_token          = "hf_REPLACE_WITH_YOUR_TOKEN"

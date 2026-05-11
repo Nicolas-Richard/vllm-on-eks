@@ -1,0 +1,25 @@
+# Single-tenant sustained load at 20 rps.
+#
+# Purpose: stress one tenant past the per-worker capacity to exercise
+# AIMD's defense of the TTFT SLO. With 2 vLLM engines and the chart's
+# default budget, 20 rps for tenant-a alone is well above what the GPUs
+# can serve at low TTFT, so the controller should:
+#   - Detect TTFT > target within ~10 s window
+#   - Multiplicatively shrink cap_per_worker by 0.75 each MD tick
+#   - Per-tenant queue_max=2 sheds 504s while AIMD contracts the budget
+#   - Steady-state should land at a cap where TTFT p99 ≈ target
+#
+# vllm bench runs to num_prompts, not wall time. 20 rps × 900 s = 18000.
+#
+# Run:
+#   ./bench/run_scenario.sh bench/scenarios/tenant-a-20rps.yaml \
+#     --caps-enabled true
+
+total_duration_s: 900
+tenants:
+  - id: tenant-a
+    role: stress_paying
+    start_offset_s: 0
+    duration_s: 900
+    request_rate: 20
+    num_prompts: 18000

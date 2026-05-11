@@ -49,11 +49,6 @@ output "cpu_node_group_arn" {
   value       = aws_eks_node_group.cpu.arn
 }
 
-output "gpu_node_group_arn" {
-  description = "ARN of the GPU managed node group"
-  value       = aws_eks_node_group.gpu.arn
-}
-
 output "kubeconfig_command" {
   description = "Command to write kubeconfig for this cluster"
   value       = "aws eks update-kubeconfig --region ${var.region} --name ${aws_eks_cluster.this.name} --profile <AWS_PROFILE>"
@@ -62,4 +57,19 @@ output "kubeconfig_command" {
 output "cluster_arn" {
   description = "EKS cluster ARN — consumed by aws_prometheus_scraper in Sub-project B"
   value       = aws_eks_cluster.this.arn
+}
+
+output "node_iam_role_arn" {
+  description = "Shared IAM role ARN used by managed node groups; consumed by Karpenter EC2NodeClass to launch nodes with the same EKS-worker permissions."
+  value       = aws_iam_role.node.arn
+}
+
+output "node_iam_role_name" {
+  description = "Name of the shared node IAM role; Karpenter's EC2NodeClass.role takes a role name (not ARN) so it can manage the instance profile."
+  value       = aws_iam_role.node.name
+}
+
+output "cluster_security_group_id" {
+  description = "Auto-created EKS cluster security group; Karpenter-launched nodes attach to this so they can reach the API server."
+  value       = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
 }

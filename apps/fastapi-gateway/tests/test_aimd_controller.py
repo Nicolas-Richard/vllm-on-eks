@@ -135,27 +135,27 @@ async def test_decreases_cap_when_p99_above_target():
         sched, hist,
         target_p99_s=2.0, tick_s=TICK_S, window_s=2.0,
         cap_min=4, cap_max=64,
-        decrease_step=1,
+        decrease_factor=0.5,
     )
     await _run_with_load(controller, hist, latency_s=5.0)
-    # Subtractive: 16 → 15 → 14 → ... over multiple ticks.
+    # Multiplicative halving: 16 → 8 → 4 (clamped).
     assert sched.cap_per_worker < 16
-    assert sched.set_calls and sched.set_calls[0] == 15
+    assert sched.set_calls and sched.set_calls[0] == 8
 
 
-async def test_decrease_step_configurable():
-    """A larger decrease_step shrinks cap by the configured amount per tick."""
+async def test_decrease_factor_configurable():
+    """A different decrease_factor produces a different MD step."""
     hist = _fresh_histogram()
     sched = _StubScheduler(cap=20, queue_nonempty=True)
     controller = AIMDController(
         sched, hist,
         target_p99_s=2.0, tick_s=TICK_S, window_s=2.0,
         cap_min=4, cap_max=64,
-        decrease_step=4,
+        decrease_factor=0.75,
     )
     await _run_with_load(controller, hist, latency_s=5.0)
-    # First decrease: 20 → 16 (subtract 4).
-    assert sched.set_calls and sched.set_calls[0] == 16
+    # First decrease: 20 → floor(20 * 0.75) = 15.
+    assert sched.set_calls and sched.set_calls[0] == 15
 
 
 async def test_clamps_to_min():
@@ -165,10 +165,10 @@ async def test_clamps_to_min():
         sched, hist,
         target_p99_s=2.0, tick_s=TICK_S, window_s=2.0,
         cap_min=4, cap_max=64,
-        decrease_step=2,
+        decrease_factor=0.5,
     )
     await _run_with_load(controller, hist, latency_s=5.0)
-    # 5 - 2 = 3, clamped to cap_min=4. Subsequent ticks stay at 4.
+    # floor(5 * 0.5) = 2, clamped to cap_min=4. Subsequent ticks stay at 4.
     assert sched.cap_per_worker == 4
     assert all(v == 4 for v in sched.set_calls)
 
@@ -214,11 +214,11 @@ async def test_p99_clamps_when_samples_in_overflow_bucket():
         sched, hist,
         target_p99_s=2.0, tick_s=TICK_S, window_s=2.0,
         cap_min=4, cap_max=64,
-        decrease_step=1,
+        decrease_factor=0.5,
     )
     await _run_with_load(controller, hist, latency_s=1000.0)
     # Decrease path fired → p99 was finite (clamped to 600.0) and > target.
-    assert sched.set_calls and sched.set_calls[0] == 15
+    assert sched.set_calls and sched.set_calls[0] == 8
     assert sched.cap_per_worker < 16
 
 
